@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AAAHP Weather Forecast</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            background-color: #0f172a;
+        }
+
+        /* Custom scrollbar for webkit */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Animation utilities */
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- INTERNAL ICON SYSTEM (AAAHP Reliability) ---
+        // Replacing external dependency with internal SVG components to prevent crashes.
+
+        const IconBase = ({ children, className, ...props }) => (
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24" height="24" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"
+                className={className}
+                {...props}
+            >
+                {children}
+            </svg>
+        );
+
+        const Icons = {
+            Cloud: (p) => <IconBase {...p}><path d="M17.5 19c0-1.7-1.3-3-3-3h-1.1c-.1-2.9-2.4-5.2-5.3-5.3-2.7 0-5 2-5.4 4.7 0 .1-.1.2-.1.3-2.2 0-4 1.8-4 4s1.8 4 4 4h11.5c2.5 0 4.5-2 4.5-4.5S19.5 15.5 17.5 19Z" /></IconBase>,
+            Sun: (p) => <IconBase {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></IconBase>,
+            CloudRain: (p) => <IconBase {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M16 14v6" /><path d="M8 14v6" /><path d="M12 16v6" /></IconBase>,
+            CloudLightning: (p) => <IconBase {...p}><path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" /><path d="m13 12-3 5h4l-3 5" /></IconBase>,
+            CloudSnow: (p) => <IconBase {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M8 15h.01" /><path d="M8 19h.01" /><path d="M12 17h.01" /><path d="M12 21h.01" /><path d="M16 15h.01" /><path d="M16 19h.01" /></IconBase>,
+            Wind: (p) => <IconBase {...p}><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2" /><path d="M9.6 4.6A2 2 0 1 1 11 8H2" /><path d="M12.6 19.4A2 2 0 1 0 14 16H2" /></IconBase>,
+            Droplets: (p) => <IconBase {...p}><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" /><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97" /></IconBase>,
+            Thermometer: (p) => <IconBase {...p}><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z" /></IconBase>,
+            Search: (p) => <IconBase {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></IconBase>,
+            MapPin: (p) => <IconBase {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></IconBase>,
+            Navigation: (p) => <IconBase {...p}><polygon points="3 11 22 2 13 21 11 13 3 11" /></IconBase>,
+            Loader2: (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></IconBase>,
+            Calendar: (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></IconBase>,
+            Clock: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></IconBase>,
+            Sunrise: (p) => <IconBase {...p}><path d="M12 2v8" /><path d="m4.93 10.93 1.41 1.41" /><path d="M2 18h2" /><path d="M20 18h2" /><path d="m19.07 10.93-1.41 1.41" /><path d="M22 22H2" /><path d="m8 6 4-4 4 4" /><path d="M16 18a4 4 0 0 0-8 0" /></IconBase>,
+            Sunset: (p) => <IconBase {...p}><path d="M12 10V2" /><path d="m4.93 10.93 1.41 1.41" /><path d="M2 18h2" /><path d="M20 18h2" /><path d="m19.07 10.93-1.41 1.41" /><path d="M22 22H2" /><path d="m16 6-4-4-4 4" /><path d="M16 18a4 4 0 0 0-8 0" /></IconBase>,
+            Eye: (p) => <IconBase {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></IconBase>,
+            Umbrella: (p) => <IconBase {...p}><path d="M22 12a10.06 10.06 1 0 0 0-20 0Z" /><path d="M12 12v8a2 2 0 0 0 4 0" /><path d="M12 2v1" /></IconBase>,
+            AlertCircle: (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" /></IconBase>,
+            ArrowUp: (p) => <IconBase {...p}><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></IconBase>,
+            Gauge: (p) => <IconBase {...p}><path d="m12 14 4-4" /><path d="M3.34 19a10 10 0 1 1 17.32 0" /></IconBase>,
+            SunDim: (p) => <IconBase {...p}><circle cx="12" cy="12" r="4" /><path d="M12 4h.01" /><path d="M20 12h.01" /><path d="M12 20h.01" /><path d="M4 12h.01" /><path d="M17.657 6.343h.01" /><path d="M17.657 17.657h.01" /><path d="M6.343 17.657h.01" /><path d="M6.343 6.343h.01" /></IconBase>,
+            RefreshCw: (p) => <IconBase {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></IconBase>,
+            Activity: (p) => <IconBase {...p}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></IconBase>,
+            ShieldCheck: (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></IconBase>,
+            TrendingUp: (p) => <IconBase {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></IconBase>,
+            TrendingDown: (p) => <IconBase {...p}><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></IconBase>,
+            Minus: (p) => <IconBase {...p}><line x1="5" x2="19" y1="12" y2="12" /></IconBase>
+        };
+
+        const {
+            Cloud, Sun, CloudRain, CloudLightning, CloudSnow, Wind, Droplets, Thermometer,
+            Search, MapPin, Navigation, Loader2, Calendar, Clock, Sunrise, Sunset, Eye,
+            Umbrella, AlertCircle, ArrowUp, Gauge, SunDim, RefreshCw, Activity,
+            ShieldCheck, TrendingUp, TrendingDown, Minus
+        } = Icons;
+
+        // --- Utility Functions ---
+
+        const isRainy = (code) => {
+            const rainCodes = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99];
+            return rainCodes.includes(code);
+        };
+
+        const getWeatherIcon = (code, isDay = 1, size = "w-full h-full") => {
+            const props = { className: size };
+            if (code === 0) return isDay ? <Sun {...props} className={`${size} text-yellow-400 drop-shadow-lg`} /> : <Sun {...props} className={`${size} text-blue-200 drop-shadow-lg`} />;
+            if (code >= 1 && code <= 3) return <Cloud {...props} className={`${size} text-gray-200 drop-shadow-lg`} />;
+            if (code >= 45 && code <= 48) return <Cloud {...props} className={`${size} text-gray-400 drop-shadow-lg`} />;
+            if (code >= 51 && code <= 67) return <CloudRain {...props} className={`${size} text-blue-400 drop-shadow-lg`} />;
+            if (code >= 71 && code <= 77) return <CloudSnow {...props} className={`${size} text-white drop-shadow-lg`} />;
+            if (code >= 80 && code <= 82) return <CloudRain {...props} className={`${size} text-blue-500 drop-shadow-lg`} />;
+            if (code >= 85 && code <= 86) return <CloudSnow {...props} className={`${size} text-white drop-shadow-lg`} />;
+            if (code >= 95 && code <= 99) return <CloudLightning {...props} className={`${size} text-yellow-400 drop-shadow-lg`} />;
+            return <Sun {...props} className={`${size} text-yellow-400`} />;
+        };
+
+        const getBackgroundClass = (code, isDay) => {
+            if (!isDay) return 'from-[#0f172a] via-[#1e293b] to-[#0f172a]'; // Deep Night
+            if (code === 0) return 'from-[#2980b9] to-[#6dd5fa]'; // Clear Blue Sky
+            if (code >= 1 && code <= 3) return 'from-[#4b6cb7] to-[#182848]'; // Cloudy Day
+            if (code >= 51) return 'from-[#373B44] to-[#4286f4]'; // Rainy/Stormy
+            return 'from-blue-500 to-cyan-400'; // Default
+        };
+
+        const getAqiColor = (aqi) => {
+            if (aqi <= 50) return 'text-emerald-400';
+            if (aqi <= 100) return 'text-yellow-400';
+            if (aqi <= 150) return 'text-orange-400';
+            if (aqi <= 200) return 'text-red-400';
+            if (aqi <= 300) return 'text-purple-400';
+            return 'text-rose-900';
+        };
+
+        const getAqiDescription = (aqi) => {
+            if (aqi <= 50) return 'Good';
+            if (aqi <= 100) return 'Moderate';
+            if (aqi <= 150) return 'Unhealthy for Sensitive Groups';
+            if (aqi <= 200) return 'Unhealthy';
+            if (aqi <= 300) return 'Very Unhealthy';
+            return 'Hazardous';
+        };
+
+        const formatDate = (isoString) => {
+            const date = new Date(isoString);
+            return new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(date);
+        };
+
+        const formatTime = (isoString) => {
+            const date = new Date(isoString);
+            return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).format(date);
+        };
+
+        // --- Components ---
+
+        const DetailCard = ({ icon: Icon, label, value, subValue, highlightColor = "text-blue-300/80" }) => (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md hover:bg-white/10 transition-colors group">
+                <Icon className={`w-6 h-6 mb-2 ${highlightColor} group-hover:scale-110 transition-transform`} />
+                <span className="text-xs font-medium text-slate-300 uppercase tracking-wide text-center">{label}</span>
+                <span className="text-lg font-bold mt-1 text-white text-center">{value}</span>
+                {subValue && <span className="text-xs text-slate-400 mt-1 text-center">{subValue}</span>}
+            </div>
+        );
+
+        // --- Main Component ---
+
+        function WeatherApp() {
+            const [loading, setLoading] = useState(true);
+            const [refreshing, setRefreshing] = useState(false);
+            const [error, setError] = useState(null);
+            const [weatherData, setWeatherData] = useState(null);
+            const [airQuality, setAirQuality] = useState(null);
+            const [locationName, setLocationName] = useState("Tangerang, Banten");
+            const [coords, setCoords] = useState({ lat: -6.1783, lon: 106.6319 });
+            const [searchQuery, setSearchQuery] = useState("");
+            const [searchResults, setSearchResults] = useState([]);
+            const [showSearch, setShowSearch] = useState(false);
+            const [lastUpdated, setLastUpdated] = useState(null);
+
+            useEffect(() => {
+                fetchWeather(coords.lat, coords.lon);
+            }, []);
+
+            const fetchWeather = async (lat, lon) => {
+                if (!weatherData) setLoading(true);
+                else setRefreshing(true);
+
+                setError(null);
+                setShowSearch(false);
+
+                try {
+                    // 1. Fetch Weather Data (Forecast)
+                    // Added &past_days=1 to fetch yesterday's data for "AAAHP" temperature comparison
+                    const weatherPromise = fetch(
+                        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,visibility,dew_point_2m,cloud_cover&hourly=temperature_2m,weather_code,is_day,precipitation_probability,uv_index,visibility&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,precipitation_probability_max,uv_index_max&minutely_15=precipitation,weather_code,is_day&timezone=auto&forecast_days=10&past_days=1`
+                    );
+
+                    // 2. Fetch Air Quality Data
+                    const airQualityPromise = fetch(
+                        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone`
+                    );
+
+                    const [weatherRes, airRes] = await Promise.all([weatherPromise, airQualityPromise]);
+
+                    if (!weatherRes.ok) throw new Error("Failed to fetch weather data");
+
+                    const weatherJson = await weatherRes.json();
+                    const airJson = airRes.ok ? await airRes.json() : null;
+
+                    setWeatherData(weatherJson);
+                    setAirQuality(airJson);
+                    setCoords({ lat, lon });
+                    setLastUpdated(new Date());
+
+                } catch (err) {
+                    setError("Unable to retrieve complete atmospheric data. Please check connection.");
+                    console.error(err);
+                } finally {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
+            };
+
+            const searchLocation = async (e) => {
+                e.preventDefault();
+                if (!searchQuery.trim()) return;
+
+                try {
+                    const response = await fetch(
+                        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=5&language=en&format=json`
+                    );
+                    const data = await response.json();
+                    if (data.results) {
+                        setSearchResults(data.results);
+                        setShowSearch(true);
+                    } else {
+                        setSearchResults([]);
+                        setError("Location not found.");
+                    }
+                } catch (err) {
+                    console.error("Search failed", err);
+                }
+            };
+
+            const handleLocationSelect = (result) => {
+                setLocationName(`${result.name}, ${result.country || ''}`);
+                fetchWeather(result.latitude, result.longitude);
+                setSearchQuery("");
+                setSearchResults([]);
+            };
+
+            const handleCurrentLocation = () => {
+                if (navigator.geolocation) {
+                    setLoading(true);
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const { latitude, longitude } = position.coords;
+                            setLocationName("My Precise Location");
+                            fetchWeather(latitude, longitude);
+                        },
+                        (err) => {
+                            console.error("Geo Error", err);
+                            // Don't crash, just inform user
+                            setError("Location access denied or not available (HTTPS required).");
+                            setLoading(false);
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 0
+                        }
+                    );
+                } else {
+                    setError("Geolocation is not supported by your browser.");
+                }
+            };
+
+            const handleRefresh = () => {
+                fetchWeather(coords.lat, coords.lon);
+            };
+
+            if (loading && !weatherData) {
+                return (
+                    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
+                        <div className="flex flex-col items-center">
+                            <div className="relative">
+                                <div className="w-20 h-20 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                                <ShieldCheck className="w-8 h-8 text-emerald-400 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                            </div>
+                            <p className="mt-6 text-slate-400 font-mono text-sm tracking-widest uppercase">Initializing AAAHP Protocols...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            const current = weatherData?.current;
+            const hourly = weatherData?.hourly;
+            const daily = weatherData?.daily;
+            const minutely = weatherData?.minutely_15;
+            const aqi = airQuality?.current;
+            const isDay = current?.is_day;
+            const bgClass = getBackgroundClass(current?.weather_code, isDay);
+
+            const weekMin = Math.min(...(daily?.temperature_2m_min || [0]));
+            const weekMax = Math.max(...(daily?.temperature_2m_max || [100]));
+            const weekRange = weekMax - weekMin;
+
+            // --- AAAHP Calculation Logic ---
+            const getCurrentHourIndex = () => {
+                if (!hourly) return -1;
+                const now = new Date();
+                // Reset minutes to 00 for hour matching
+                now.setMinutes(0, 0, 0);
+                // Find matching hour in array
+                return hourly.time.findIndex(t => new Date(t).getTime() >= now.getTime());
+            };
+
+            const currentHourIndex = getCurrentHourIndex();
+
+            // 1. Comparison vs Yesterday
+            const getYesterdayComparison = () => {
+                if (currentHourIndex < 24) return null; // Need at least 24h history
+                const yesterdayTemp = hourly.temperature_2m[currentHourIndex - 24];
+                const diff = current.temperature_2m - yesterdayTemp;
+                const absDiff = Math.abs(diff).toFixed(1);
+
+                if (diff > 0.5) return { text: `${absDiff}° warmer`, color: 'text-orange-300' };
+                if (diff < -0.5) return { text: `${absDiff}° cooler`, color: 'text-blue-300' };
+                return { text: 'Same as yesterday', color: 'text-slate-300' };
+            };
+
+            // 2. Trend (vs 1 hour ago)
+            const getTrend = () => {
+                if (currentHourIndex < 1) return { icon: Minus, text: "Stable" };
+                const prevTemp = hourly.temperature_2m[currentHourIndex - 1];
+                const diff = current.temperature_2m - prevTemp;
+
+                if (diff > 0.1) return { icon: TrendingUp, text: "Rising", color: "text-orange-400" };
+                if (diff < -0.1) return { icon: TrendingDown, text: "Falling", color: "text-blue-400" };
+                return { icon: Minus, text: "Stable", color: "text-slate-400" };
+            };
+
+            // 3. Precise "Apparent" Label
+            const getApparentLabel = () => {
+                if (current.temperature_2m > 27 && current.relative_humidity_2m > 40) return "Heat Index";
+                if (current.temperature_2m < 10 && current.wind_speed_10m > 4.8) return "Wind Chill";
+                return "Real Feel";
+            };
+
+            const tempComparison = getYesterdayComparison();
+            const tempTrend = getTrend();
+            const apparentLabel = getApparentLabel();
+            const TrendIcon = tempTrend.icon;
+
+            const getPreciseRainForecast = () => {
+                if (!minutely || !current) return null;
+                const now = new Date();
+                const currentIsRainy = isRainy(current.weather_code) || current.precipitation > 0;
+                const nextIntervalIndex = minutely.time.findIndex(t => new Date(t) > now);
+                if (nextIntervalIndex === -1) return null;
+
+                for (let i = nextIntervalIndex; i < Math.min(nextIntervalIndex + 12, minutely.time.length); i++) {
+                    const time = minutely.time[i];
+                    const precip = minutely.precipitation[i];
+                    const code = minutely.weather_code[i];
+                    const isForecastRainy = isRainy(code) || precip > 0.1;
+                    if (currentIsRainy && !isForecastRainy) return { type: 'stopping', time: formatTime(time), relative: 'Soon' };
+                    if (!currentIsRainy && isForecastRainy) return { type: 'starting', time: formatTime(time), relative: 'Soon' };
+                }
+
+                if (!hourly) return null;
+                // Use dynamic index for forecast scan
+                const nextHourIndex = hourly.time.findIndex(t => new Date(t) > now);
+                for (let i = nextHourIndex; i < Math.min(nextHourIndex + 24, hourly.time.length); i++) {
+                    const time = hourly.time[i];
+                    const prob = hourly.precipitation_probability[i];
+                    const isForecastRainy = prob > 50;
+                    if (currentIsRainy && !isForecastRainy) return { type: 'stopping', time: formatTime(time), relative: 'Later' };
+                    if (!currentIsRainy && isForecastRainy) return { type: 'starting', time: formatTime(time), relative: 'Later' };
+                }
+                return { type: 'none', message: currentIsRainy ? "Rain continues (24h+)" : "No rain expected (24h)" };
+            };
+
+            const rainForecast = getPreciseRainForecast();
+
+            return (
+                <div className={`min-h-screen bg-gradient-to-br ${bgClass} text-white font-sans selection:bg-blue-500/30 animate-fade-in`}>
+                    <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 min-h-screen flex flex-col">
+
+                        {/* Header */}
+                        <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+                            <div className="flex flex-col items-center md:items-start w-full md:w-auto">
+                                <div className="flex items-center gap-2 text-3xl md:text-4xl font-bold tracking-tight text-white drop-shadow-md">
+                                    <MapPin className="w-8 h-8 text-blue-200" />
+                                    <span>{locationName}</span>
+                                    <span className="flex h-3 w-3 relative ml-2" title="Live Data Stream">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <p className="text-blue-100/80 font-medium text-sm border-r border-blue-400/30 pr-3 mr-3">
+                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    </p>
+                                    <span className="text-blue-200/60 text-xs font-mono">
+                                        Source: Open-Meteo • {lastUpdated?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="w-full md:w-auto flex items-center gap-3 relative z-50">
+                                <div className="relative group flex-1 md:flex-none">
+                                    <form onSubmit={searchLocation} className="relative flex items-center">
+                                        <input
+                                            type="text"
+                                            placeholder="Search location..."
+                                            className="w-full md:w-72 bg-white/10 border border-white/20 rounded-full py-2.5 px-5 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:bg-white/20 transition-all placeholder-white/40 text-white shadow-lg backdrop-blur-md text-sm"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                        />
+                                        <Search className="w-4 h-4 absolute left-3.5 text-white/60 pointer-events-none" />
+                                    </form>
+                                </div>
+                                <button onClick={handleCurrentLocation} className="p-2.5 bg-blue-500/80 hover:bg-blue-500 rounded-full transition-colors shadow-md text-white" title="GPS Locate">
+                                    <Navigation className="w-5 h-5" />
+                                </button>
+                                <button onClick={handleRefresh} className={`p-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-full transition-all shadow-md text-white ${refreshing ? 'animate-spin' : ''}`} title="Refresh">
+                                    <RefreshCw className="w-5 h-5" />
+                                </button>
+                                {showSearch && searchResults.length > 0 && (
+                                    <div className="absolute top-14 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                                        {searchResults.map((result) => (
+                                            <button key={result.id} onClick={() => handleLocationSelect(result)} className="w-full text-left px-5 py-3 hover:bg-white/10 flex flex-col border-b border-white/5 last:border-0">
+                                                <span className="font-semibold text-white text-sm">{result.name}</span>
+                                                <span className="text-xs text-slate-400">{result.admin1}, {result.country}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </header>
+
+                        {error && (
+                            <div className="bg-red-500/20 border border-red-500/30 p-4 rounded-xl text-center text-red-100 font-medium backdrop-blur-md mb-6 animate-in slide-in-from-top-2">
+                                <AlertCircle className="w-5 h-5 inline mr-2" /> {error}
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
+
+                            {/* LEFT COLUMN: Conditions (4 cols) */}
+                            <div className="lg:col-span-4 flex flex-col gap-6">
+
+                                {/* AAAHP Temperature Card */}
+                                <div className="bg-gradient-to-b from-white/10 to-white/5 border border-white/20 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+                                    <div className="absolute -top-20 -right-20 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-400/30 transition-colors duration-500"></div>
+                                    <div className="relative z-10 flex flex-col items-center text-center">
+                                        <div className="mb-4 filter drop-shadow-xl transform group-hover:scale-105 transition-transform duration-500">
+                                            {getWeatherIcon(current?.weather_code, isDay, "w-32 h-32")}
+                                        </div>
+
+                                        {/* Main Temperature Display */}
+                                        <div className="flex items-start">
+                                            <h1 className="text-8xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/70">
+                                                {Math.round(current?.temperature_2m)}°
+                                            </h1>
+                                        </div>
+
+                                        {/* Trend Indicator */}
+                                        <div className={`flex items-center gap-1.5 text-sm font-bold bg-black/20 px-3 py-1 rounded-full mb-3 ${tempTrend.color}`}>
+                                            <TrendIcon className="w-4 h-4" />
+                                            <span>{tempTrend.text}</span>
+                                        </div>
+
+                                        {/* Yesterday Comparison */}
+                                        {tempComparison && (
+                                            <div className="text-sm font-medium mb-4 flex items-center gap-2">
+                                                <span className="text-slate-400">vs Yesterday:</span>
+                                                <span className={`${tempComparison.color} font-bold`}>{tempComparison.text}</span>
+                                            </div>
+                                        )}
+
+                                        {/* High/Low & Real Feel */}
+                                        <div className="w-full grid grid-cols-2 gap-4 mt-2">
+                                            <div className="flex flex-col items-center p-2 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-slate-400 uppercase tracking-wider">H / L</span>
+                                                <div className="text-lg font-bold text-blue-100 flex items-center gap-2">
+                                                    <span>{Math.round(daily?.temperature_2m_max[0])}°</span>
+                                                    <span className="text-slate-500">/</span>
+                                                    <span>{Math.round(daily?.temperature_2m_min[0])}°</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-center p-2 bg-white/5 rounded-xl">
+                                                <span className="text-[10px] text-slate-400 uppercase tracking-wider">{apparentLabel}</span>
+                                                <div className="text-lg font-bold text-yellow-100">
+                                                    {Math.round(current?.apparent_temperature)}°
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {rainForecast && (
+                                            <div className={`mt-6 py-2 px-4 rounded-full text-sm font-semibold flex items-center gap-2 border shadow-lg transition-colors ${rainForecast.type === 'starting' ? 'bg-blue-500/30 border-blue-400/30 text-blue-50' :
+                                                rainForecast.type === 'stopping' ? 'bg-amber-500/30 border-amber-400/30 text-amber-50' :
+                                                    'bg-white/10 border-white/10 text-slate-200'
+                                                }`}>
+                                                {rainForecast.type === 'starting' ? <CloudRain className="w-4 h-4 animate-bounce" /> :
+                                                    rainForecast.type === 'stopping' ? <Sun className="w-4 h-4 animate-pulse" /> :
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                }
+                                                <span>
+                                                    {rainForecast.type === 'starting' && `Rain: ${rainForecast.time}`}
+                                                    {rainForecast.type === 'stopping' && `Clear: ${rainForecast.time}`}
+                                                    {rainForecast.type === 'none' && rainForecast.message}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Air Quality Card */}
+                                {aqi && (
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2 text-slate-300 uppercase text-xs font-bold tracking-wider">
+                                                <Activity className="w-4 h-4 text-emerald-400" /> Air Quality (AQI)
+                                            </div>
+                                            <span className={`text-sm font-bold ${getAqiColor(aqi.us_aqi)}`}>{getAqiDescription(aqi.us_aqi)}</span>
+                                        </div>
+                                        <div className="flex items-end gap-2 mb-2">
+                                            <span className={`text-5xl font-bold ${getAqiColor(aqi.us_aqi)}`}>{aqi.us_aqi}</span>
+                                            <span className="text-xs text-slate-400 mb-1.5">US Standard</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 mt-4">
+                                            <div className="bg-black/20 rounded-lg p-2 text-center">
+                                                <div className="text-[10px] text-slate-400 uppercase">PM2.5</div>
+                                                <div className="font-semibold">{aqi.pm2_5}</div>
+                                            </div>
+                                            <div className="bg-black/20 rounded-lg p-2 text-center">
+                                                <div className="text-[10px] text-slate-400 uppercase">PM10</div>
+                                                <div className="font-semibold">{aqi.pm10}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Detailed Stats Grid */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <DetailCard icon={Wind} label="Wind & Gusts" value={`${current?.wind_speed_10m}`} subValue={`Gusts: ${current?.wind_gusts_10m} km/h`} highlightColor="text-cyan-300" />
+                                    <DetailCard icon={Droplets} label="Humidity" value={`${current?.relative_humidity_2m}%`} subValue={`Dew: ${Math.round(current?.dew_point_2m)}°`} highlightColor="text-blue-300" />
+                                    <DetailCard icon={Eye} label="Visibility" value={`${(current?.visibility / 1000).toFixed(1)} km`} subValue={current?.visibility > 9000 ? "Clear" : "Haze"} highlightColor="text-purple-300" />
+                                    <DetailCard icon={Cloud} label="Cloud Cover" value={`${current?.cloud_cover}%`} subValue={current?.cloud_cover > 80 ? "Overcast" : current?.cloud_cover > 20 ? "Partly" : "Clear"} highlightColor="text-gray-300" />
+                                </div>
+
+                                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex justify-between items-center backdrop-blur-md">
+                                    <div className="flex flex-col items-center flex-1 border-r border-white/10">
+                                        <Sunrise className="w-6 h-6 text-yellow-300 mb-1" />
+                                        <span className="text-[10px] text-slate-400 uppercase">Sunrise</span>
+                                        <span className="font-semibold text-sm">{formatTime(daily?.sunrise[0])}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center flex-1">
+                                        <Sunset className="w-6 h-6 text-orange-400 mb-1" />
+                                        <span className="text-[10px] text-slate-400 uppercase">Sunset</span>
+                                        <span className="font-semibold text-sm">{formatTime(daily?.sunset[0])}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* RIGHT COLUMN: Forecasts (8 cols) */}
+                            <div className="lg:col-span-8 flex flex-col gap-6">
+
+                                {/* Hourly - Corrected to handle historical data in array */}
+                                <div className="bg-black/20 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
+                                    <div className="flex items-center gap-2 mb-6 text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                                        <Clock className="w-4 h-4 text-blue-400" /> 24-Hour Precision Trend
+                                    </div>
+                                    <div className="flex overflow-x-auto pb-4 gap-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent snap-x">
+                                        {hourly?.time.slice(currentHourIndex, currentHourIndex + 25).map((time, i) => {
+                                            const index = currentHourIndex + i; // Correct index for original array
+                                            if (index >= hourly.time.length) return null;
+
+                                            const forecastTime = new Date(time);
+                                            const isNow = i === 0;
+
+                                            return (
+                                                <div key={index} className={`snap-start flex-shrink-0 flex flex-col items-center space-y-2 min-w-[70px] p-2 rounded-xl transition-all ${isNow ? 'bg-blue-500/20 border border-blue-400/30' : ''}`}>
+                                                    <span className="text-xs font-medium text-slate-300 whitespace-nowrap">{isNow ? 'NOW' : formatTime(time)}</span>
+                                                    <div className="w-8 h-8 transition-transform hover:scale-110">
+                                                        {getWeatherIcon(hourly.weather_code[index], hourly.is_day[index])}
+                                                    </div>
+                                                    <span className="text-lg font-bold">{Math.round(hourly.temperature_2m[index])}°</span>
+                                                    <div className="h-6 flex items-end">
+                                                        {hourly.precipitation_probability[index] > 0 && (
+                                                            <span className="text-[10px] text-blue-200 font-bold flex items-center gap-0.5 bg-blue-500/20 px-1.5 py-0.5 rounded-full">
+                                                                <Droplets className="w-2.5 h-2.5" /> {hourly.precipitation_probability[index]}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* 10-Day */}
+                                <div className="bg-black/20 border border-white/10 rounded-3xl p-6 backdrop-blur-xl flex-1">
+                                    <div className="flex items-center gap-2 mb-6 text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                                        <Calendar className="w-4 h-4 text-purple-400" /> 10-Day Outlook
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        {daily?.time.map((time, index) => {
+                                            const min = Math.round(daily.temperature_2m_min[index]);
+                                            const max = Math.round(daily.temperature_2m_max[index]);
+                                            const leftPos = ((min - weekMin) / weekRange) * 100;
+                                            const width = ((max - min) / weekRange) * 100;
+
+                                            return (
+                                                <div key={index} className="grid grid-cols-[70px_1fr_1fr] md:grid-cols-[90px_50px_1fr] items-center py-3.5 border-b border-white/5 last:border-0 hover:bg-white/5 px-4 rounded-xl transition-colors group">
+                                                    <span className="font-semibold text-slate-200 text-base">{index === 0 ? "Today" : formatDate(time)}</span>
+                                                    <div className="flex justify-center">
+                                                        <div className="w-7 h-7 opacity-90 group-hover:opacity-100 transition-opacity">
+                                                            {getWeatherIcon(daily.weather_code[index], 1)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 w-full pl-4 md:pl-6">
+                                                        <span className="w-8 text-right font-medium text-slate-400 text-sm">{min}°</span>
+                                                        <div className="flex-1 h-1.5 bg-white/10 rounded-full relative overflow-hidden">
+                                                            <div className="absolute top-0 bottom-0 rounded-full bg-gradient-to-r from-blue-400 to-yellow-400 opacity-80" style={{ left: `${leftPos}%`, width: `${width}%` }}></div>
+                                                        </div>
+                                                        <span className="w-8 text-left font-bold text-white text-sm">{max}°</span>
+                                                        <div className="hidden sm:flex items-center gap-3 ml-2 w-24 justify-end">
+                                                            {daily.precipitation_probability_max[index] > 0 ? (
+                                                                <span className="flex items-center gap-1 text-blue-300 text-xs font-medium">
+                                                                    <Droplets className="w-3 h-3" /> {daily.precipitation_probability_max[index]}%
+                                                                </span>
+                                                            ) : <span className="text-slate-600 text-xs">-</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WeatherApp />);
+    </script>
+</body>
+
+</html>

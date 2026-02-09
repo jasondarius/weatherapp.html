@@ -1,0 +1,10 @@
+# AI artifacts
+.gemini/
+
+# GitHub Desktop Installer
+GitHubDesktopSetup-x64.exe
+
+# Temporary files
+*.tmp
+*.log
+Thumbs.db
